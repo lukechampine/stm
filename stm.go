@@ -213,18 +213,16 @@ retry:
 	globalLock.Unlock()
 }
 
-// Get is a helper transaction that reads a value.
-func Get(v *Var, recv *interface{}) func(*Tx) {
-	return func(tx *Tx) {
-		*recv = tx.Get(v)
-	}
+// AtomicGet is a helper function that atomically reads a value.
+func AtomicGet(v *Var) interface{} {
+	var i interface{}
+	Atomically(func(tx *Tx) { i = tx.Get(v) })
+	return i
 }
 
-// Set is a helper transaction that writes a value.
-func Set(v *Var, val interface{}) func(*Tx) {
-	return func(tx *Tx) {
-		tx.Set(v, val)
-	}
+// AtomicSet is a helper function that atomically writes a value.
+func AtomicSet(v *Var, val interface{}) {
+	Atomically(func(tx *Tx) { tx.Set(v, val) })
 }
 
 // Compose is a helper function that composes multiple transactions into a

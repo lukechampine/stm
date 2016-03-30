@@ -212,3 +212,27 @@ retry:
 	}
 	globalLock.Unlock()
 }
+
+// Get is a helper transaction that reads a value.
+func Get(v *Var, recv *interface{}) func(*Tx) {
+	return func(tx *Tx) {
+		*recv = tx.Get(v)
+	}
+}
+
+// Set is a helper transaction that writes a value.
+func Set(v *Var, val interface{}) func(*Tx) {
+	return func(tx *Tx) {
+		tx.Set(v, val)
+	}
+}
+
+// Compose is a helper function that composes multiple transactions into a
+// single transaction.
+func Compose(fns ...func(*Tx)) func(*Tx) {
+	return func(tx *Tx) {
+		for _, f := range fns {
+			f(tx)
+		}
+	}
+}

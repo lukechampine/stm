@@ -46,26 +46,27 @@ Internally, `tx.Retry` simply calls `panic(stm.Retry)`. Panicking with any
 other value will cancel the transaction; no values will be changed. However,
 it is the responsibility of the caller to catch such panics.
 
-Multiple transactions can be composed using `OrElse`. If the first transaction
-calls `Retry`, the second transaction will be run. If the second transaction
-also calls `Retry`, the entire call will block. For example, this code
-implements the "decrement-if-nonzero" transaction above, but for two values.
-It will first try to decrement `x`, then `y`, and block if both values are zero.
+Multiple transactions can be composed using `Select`. If the first transaction
+calls `Retry`, the next transaction will be run, and so on. If all of the
+transactions call `Retry`, the call will block and the entire selection will
+be retried. For example, this code implements the "decrement-if-nonzero"
+transaction above, but for two values. It will first try to decrement `x`,
+then `y`, and block if both values are zero.
 
 ```go
-	func dec(v *stm.Var) {
+	func dec(v *stm.Var) func(*stm.Tx) {
 		return func(tx *stm.Tx) {
 			cur := tx.Get(v).(int)
 			if cur == 0 {
-				panic(stm.Retry)
+				tx.Retry()
 			}
-			tx.Set(x, cur-1)
+			tx.Set(v, cur-1)
 		}
 	}
 
-	// Note that OrElse does not perform any work itself, but merely
+	// Note that Select does not perform any work itself, but merely
 	// returns a new transaction.
-	stm.Atomically(stm.OrElse(dec(x), dec(y))
+	stm.Atomically(stm.Select(dec(x), dec(y)))
 ```
 
 An important caveat: transactions must not have side effects! This is because a

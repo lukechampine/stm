@@ -40,25 +40,26 @@ Internally, tx.Retry simply calls panic(stm.Retry). Panicking with any other
 value will cancel the transaction; no values will be changed. However, it is
 the responsibility of the caller to catch such panics.
 
-Multiple transactions can be composed with OrElse. If the first transaction
-calls retry, the second transaction will be run. If the second transaction
-also calls retry, the entire call will block. For example, this code
-implements the "decrement-if-nonzero" transaction above, but for two values.
-It will first try to decrement x, then y, and block if both values are zero.
+Multiple transactions can be composed using Select. If the first transaction
+calls Retry, the next transaction will be run, and so on. If all of the
+transactions call Retry, the call will block and the entire selection will be
+retried. For example, this code implements the "decrement-if-nonzero"
+transaction above, but for two values. It will first try to decrement x, then
+y, and block if both values are zero.
 
 	func dec(v *stm.Var) {
 		return func(tx *stm.Tx) {
 			cur := tx.Get(v).(int)
 			if cur == 0 {
-				panic(stm.Retry)
+				tx.Retry()
 			}
-			tx.Set(x, cur-1)
+			tx.Set(v, cur-1)
 		}
 	}
 
-	// Note that OrElse does not perform any work itself, but merely
+	// Note that Select does not perform any work itself, but merely
 	// returns a transaction function.
-	stm.Atomically(stm.OrElse(dec(x), dec(y))
+	stm.Atomically(stm.Select(dec(x), dec(y)))
 
 An important caveat: transactions must not have side effects! This is because a
 transaction may be restarted several times before completing, meaning the side
@@ -169,11 +170,21 @@ func catchRetry(fn func(*Tx), tx *Tx) (retry bool) {
 	return
 }
 
-// OrElse runs fn1, and runs fn2 if fn1 calls Retry.
-func OrElse(fn1, fn2 func(*Tx)) func(*Tx) {
+// Select runs the supplied functions in order. Execution stops when a
+// function succeeds without calling Retry. If no functions succeed, the
+// entire selection will be retried.
+func Select(fns ...func(*Tx)) func(*Tx) {
 	return func(tx *Tx) {
-		if catchRetry(fn1, tx) {
-			fn2(tx)
+		switch len(fns) {
+		case 0:
+			// empty Select blocks forever
+			tx.Retry()
+		case 1:
+			fns[0](tx)
+		default:
+			if catchRetry(fns[0], tx) {
+				Select(fns[1:]...)(tx)
+			}
 		}
 	}
 }

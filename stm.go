@@ -149,9 +149,9 @@ func (tx *Tx) Retry() {
 	panic(Retry)
 }
 
-// Check is a helper function that retries a transaction if the condition is
+// Assert is a helper function that retries a transaction if the condition is
 // not satisfied.
-func (tx *Tx) Check(p bool) {
+func (tx *Tx) Assert(p bool) {
 	if !p {
 		tx.Retry()
 	}

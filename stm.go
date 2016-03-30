@@ -73,14 +73,12 @@ is not entirely possible due to Go's type system; we are forced to use
 interface{} and type assertions. Furthermore, Haskell can enforce at compile
 time that STM variables are not modified outside the STM monad. This is not
 possible in Go, so be especially careful when using pointers in your STM code.
-
-It remains to be seen whether this style of concurrency has practical
-applications in Go. If you find this package useful, please tell me about it!
 */
 package stm
 
 import (
 	"sync"
+	"sync/atomic"
 )
 
 // Retry is a sentinel value. When thrown via panic, it indicates that a
@@ -92,12 +90,14 @@ var globalLock sync.Mutex
 
 // A Var holds an STM variable.
 type Var struct {
-	val interface{}
+	val atomic.Value
 }
 
 // NewVar returns a new STM variable.
 func NewVar(val interface{}) *Var {
-	return &Var{val}
+	v := new(Var)
+	v.val.Store(val)
+	return v
 }
 
 // A Tx represents an atomic transaction.
@@ -107,10 +107,11 @@ type Tx struct {
 }
 
 // verify checks that none of the logged values have changed since the
-// transaction began
+// transaction began.
+// TODO: is pointer equality good enough? probably not, without immutable data
 func (tx *Tx) verify() bool {
 	for v, val := range tx.reads {
-		if v.val != val {
+		if v.val.Load() != val {
 			return false
 		}
 	}
@@ -120,7 +121,7 @@ func (tx *Tx) verify() bool {
 // commit writes the values in the transaction log to their respective Vars.
 func (tx *Tx) commit() {
 	for v, val := range tx.writes {
-		v.val = val
+		v.val.Store(val)
 	}
 }
 
@@ -135,10 +136,8 @@ func (tx *Tx) Get(v *Var) interface{} {
 		return val
 	}
 	// Otherwise, record and return its current value.
-	globalLock.Lock()
-	defer globalLock.Unlock()
-	tx.reads[v] = v.val
-	return v.val
+	tx.reads[v] = v.val.Load()
+	return tx.reads[v]
 }
 
 // Set sets the value of a Var for the lifetime of the transaction.
@@ -209,22 +208,25 @@ retry:
 		goto retry
 	}
 	// commit the write log
-	if len(tx.writes) > 0 {
-		tx.commit()
-	}
+	tx.commit()
 	globalLock.Unlock()
 }
 
 // AtomicGet is a helper function that atomically reads a value.
 func AtomicGet(v *Var) interface{} {
-	var i interface{}
-	Atomically(func(tx *Tx) { i = tx.Get(v) })
-	return i
+	// since we're only doing one operation, we don't need a full transaction
+	globalLock.Lock()
+	val := v.val.Load()
+	globalLock.Unlock()
+	return val
 }
 
 // AtomicSet is a helper function that atomically writes a value.
 func AtomicSet(v *Var, val interface{}) {
-	Atomically(func(tx *Tx) { tx.Set(v, val) })
+	// since we're only doing one operation, we don't need a full transaction
+	globalLock.Lock()
+	v.val.Store(val)
+	globalLock.Unlock()
 }
 
 // Compose is a helper function that composes multiple transactions into a

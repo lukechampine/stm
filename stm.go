@@ -135,6 +135,8 @@ func (tx *Tx) Get(v *Var) interface{} {
 		return val
 	}
 	// Otherwise, record and return its current value.
+	globalLock.Lock()
+	defer globalLock.Unlock()
 	tx.reads[v] = v.val
 	return v.val
 }

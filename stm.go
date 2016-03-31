@@ -88,6 +88,7 @@ const Retry = "retry"
 
 // The globalLock serializes transaction verification/committal.
 var globalLock sync.Mutex
+var globalCond = sync.NewCond(&globalLock)
 
 // A Var holds an STM variable.
 type Var struct {
@@ -124,6 +125,15 @@ func (tx *Tx) commit() {
 	for v, val := range tx.writes {
 		v.val.Store(val)
 	}
+}
+
+// wait blocks until another transaction modifies any of the Vars read by tx.
+func (tx *Tx) wait() {
+	globalCond.L.Lock()
+	for tx.verify() {
+		globalCond.Wait()
+	}
+	globalCond.L.Unlock()
 }
 
 // Get returns the value of v as of the start of the transaction.
@@ -200,6 +210,7 @@ retry:
 		writes: make(map[*Var]interface{}),
 	}
 	if catchRetry(fn, tx) {
+		tx.wait()
 		goto retry
 	}
 	// verify the read log
@@ -210,6 +221,7 @@ retry:
 	}
 	// commit the write log
 	tx.commit()
+	globalCond.Broadcast()
 	globalLock.Unlock()
 }
 
@@ -227,6 +239,7 @@ func AtomicSet(v *Var, val interface{}) {
 	// since we're only doing one operation, we don't need a full transaction
 	globalLock.Lock()
 	v.val.Store(val)
+	globalCond.Broadcast()
 	globalLock.Unlock()
 }
 

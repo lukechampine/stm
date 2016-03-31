@@ -219,9 +219,11 @@ retry:
 		globalLock.Unlock()
 		goto retry
 	}
-	// commit the write log
-	tx.commit()
-	globalCond.Broadcast()
+	// commit the write log and broadcast that variables have changed
+	if len(tx.writes) > 0 {
+		tx.commit()
+		globalCond.Broadcast()
+	}
 	globalLock.Unlock()
 }
 

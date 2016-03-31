@@ -61,11 +61,12 @@ y, and block if both values are zero.
 	// returns a transaction function.
 	stm.Atomically(stm.Select(dec(x), dec(y)))
 
-An important caveat: transactions must not have side effects! This is because a
-transaction may be restarted several times before completing, meaning the side
-effects may execute more than once. This will almost certainly cause incorrect
-behavior. One common way to get around this is to build up a list of operations
-to perform inside the transaction, and then perform them after the transaction
+An important caveat: transactions must be idempotent (they should have the
+same effect every time they are invoked). This is because a transaction may be
+retried several times before successfully completing, meaning its side effects
+may execute more than once. This will almost certainly cause incorrect
+behavior. One common way to get around this is to build up a list of impure
+operations inside the transaction, and then perform them after the transaction
 completes.
 
 The stm API tries to mimic that of Haskell's Control.Concurrent.STM, but this

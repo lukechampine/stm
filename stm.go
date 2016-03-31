@@ -86,7 +86,8 @@ import (
 // transaction should be retried.
 const Retry = "retry"
 
-// The globalLock serializes transaction verification/committal.
+// The globalLock serializes transaction verification/committal. globalCond is
+// used to signal that at least one Var has changed.
 var globalLock sync.Mutex
 var globalCond = sync.NewCond(&globalLock)
 
@@ -182,25 +183,6 @@ func catchRetry(fn func(*Tx), tx *Tx) (retry bool) {
 	return
 }
 
-// Select runs the supplied functions in order. Execution stops when a
-// function succeeds without calling Retry. If no functions succeed, the
-// entire selection will be retried.
-func Select(fns ...func(*Tx)) func(*Tx) {
-	return func(tx *Tx) {
-		switch len(fns) {
-		case 0:
-			// empty Select blocks forever
-			tx.Retry()
-		case 1:
-			fns[0](tx)
-		default:
-			if catchRetry(fns[0], tx) {
-				Select(fns[1:]...)(tx)
-			}
-		}
-	}
-}
-
 // Atomically executes the atomic function fn.
 func Atomically(fn func(*Tx)) {
 retry:
@@ -210,6 +192,7 @@ retry:
 		writes: make(map[*Var]interface{}),
 	}
 	if catchRetry(fn, tx) {
+		// wait for one of the variables we read to change before retrying
 		tx.wait()
 		goto retry
 	}
@@ -251,6 +234,25 @@ func Compose(fns ...func(*Tx)) func(*Tx) {
 	return func(tx *Tx) {
 		for _, f := range fns {
 			f(tx)
+		}
+	}
+}
+
+// Select runs the supplied functions in order. Execution stops when a
+// function succeeds without calling Retry. If no functions succeed, the
+// entire selection will be retried.
+func Select(fns ...func(*Tx)) func(*Tx) {
+	return func(tx *Tx) {
+		switch len(fns) {
+		case 0:
+			// empty Select blocks forever
+			tx.Retry()
+		case 1:
+			fns[0](tx)
+		default:
+			if catchRetry(fns[0], tx) {
+				Select(fns[1:]...)(tx)
+			}
 		}
 	}
 }

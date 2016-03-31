@@ -140,24 +140,21 @@ func BenchmarkIncrementMutex(b *testing.B) {
 	}
 }
 
-func BenchmarkIncrementRWMutex(b *testing.B) {
+func BenchmarkIncrementChannel(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		var mu sync.RWMutex
-		x := 0
+		c := make(chan int, 1)
+		c <- 0
 		for i := 0; i < 1000; i++ {
 			go func() {
-				mu.Lock()
-				x++
-				mu.Unlock()
+				c <- 1 + <-c
 			}()
 		}
 		for {
-			mu.RLock()
-			read := x
-			mu.RUnlock()
+			read := <-c
 			if read == 1000 {
 				break
 			}
+			c <- read
 		}
 	}
 }
@@ -195,17 +192,15 @@ func BenchmarkReadVarMutex(b *testing.B) {
 	}
 }
 
-func BenchmarkReadVarRWMutex(b *testing.B) {
+func BenchmarkReadVarChannel(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		var mu sync.RWMutex
 		var wg sync.WaitGroup
 		wg.Add(1000)
-		x := 0
+		c := make(chan int)
+		close(c)
 		for i := 0; i < 1000; i++ {
 			go func() {
-				mu.RLock()
-				_ = x
-				mu.RUnlock()
+				<-c
 				wg.Done()
 			}()
 		}

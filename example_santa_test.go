@@ -43,9 +43,9 @@ type gate struct {
 }
 
 func (g *gate) pass() {
-	// decrement remaining capacity
 	stm.Atomically(func(tx *stm.Tx) {
 		rem := tx.Get(g.remaining).(int)
+		// wait until gate can hold us
 		tx.Assert(rem > 0)
 		tx.Set(g.remaining, rem-1)
 	})
@@ -53,9 +53,7 @@ func (g *gate) pass() {
 
 func (g *gate) operate() {
 	// open gate, reseting capacity
-	stm.Atomically(func(tx *stm.Tx) {
-		tx.Set(g.remaining, g.capacity)
-	})
+	stm.AtomicSet(g.remaining, g.capacity)
 	// wait for gate to be full
 	stm.Atomically(func(tx *stm.Tx) {
 		rem := tx.Get(g.remaining).(int)
@@ -65,9 +63,8 @@ func (g *gate) operate() {
 
 func newGate(capacity int) *gate {
 	return &gate{
-		capacity: capacity,
-		// gate starts out closed
-		remaining: stm.NewVar(0),
+		capacity:  capacity,
+		remaining: stm.NewVar(0), // gate starts out closed
 	}
 }
 
@@ -79,9 +76,8 @@ type group struct {
 
 func newGroup(capacity int) *group {
 	return &group{
-		capacity: capacity,
-		// group starts out with full capacity
-		remaining: stm.NewVar(capacity),
+		capacity:  capacity,
+		remaining: stm.NewVar(capacity), // group starts out with full capacity
 		gate1:     stm.NewVar(newGate(capacity)),
 		gate2:     stm.NewVar(newGate(capacity)),
 	}
@@ -90,26 +86,28 @@ func newGroup(capacity int) *group {
 func (g *group) join() (g1, g2 *gate) {
 	stm.Atomically(func(tx *stm.Tx) {
 		rem := tx.Get(g.remaining).(int)
-		g1 = tx.Get(g.gate1).(*gate)
-		g2 = tx.Get(g.gate2).(*gate)
+		// wait until the group can hold us
 		tx.Assert(rem > 0)
 		tx.Set(g.remaining, rem-1)
+		// return the group's gates
+		g1 = tx.Get(g.gate1).(*gate)
+		g2 = tx.Get(g.gate2).(*gate)
 	})
 	return
 }
 
-func (g *group) await(tx *stm.Tx) (g1, g2 *gate) {
+func (g *group) await(tx *stm.Tx) (*gate, *gate) {
 	// wait for group to be empty
 	rem := tx.Get(g.remaining).(int)
 	tx.Assert(rem == 0)
-	// return the group's gates
-	g1 = tx.Get(g.gate1).(*gate)
-	g2 = tx.Get(g.gate2).(*gate)
+	// get the group's gates
+	g1 := tx.Get(g.gate1).(*gate)
+	g2 := tx.Get(g.gate2).(*gate)
 	// reset group
 	tx.Set(g.remaining, g.capacity)
 	tx.Set(g.gate1, newGate(g.capacity))
 	tx.Set(g.gate2, newGate(g.capacity))
-	return
+	return g1, g2
 }
 
 func spawnElf(g *group, id int) {
@@ -155,7 +153,7 @@ func spawnSanta(elves, reindeer *group) {
 			chooseGroup(reindeer, "deliver toys", &s),
 			chooseGroup(elves, "meet in my study", &s),
 		))
-		fmt.Println("Ho! Ho! Ho! Let's " + s.task + "!")
+		fmt.Printf("Ho! Ho! Ho! Let's %s!\n", s.task)
 		s.gate1.operate()
 		// helpers do their work here...
 		s.gate2.operate()

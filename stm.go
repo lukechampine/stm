@@ -1,5 +1,5 @@
 /*
-package stm provides Software Transactional Memory operations for Go. This is
+Package stm provides Software Transactional Memory operations for Go. This is
 an alternative to the standard way of writing concurrent code (channels and
 mutexes). STM makes it easy to perform arbitrarily complex operations in an
 atomic fashion. One of its primary advantages over traditional locking is that

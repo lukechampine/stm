@@ -69,6 +69,11 @@ behavior. One common way to get around this is to build up a list of impure
 operations inside the transaction, and then perform them after the transaction
 completes.
 
+Another caveat: stm uses simple pointer equality to determine whether Vars
+have changed during a transaction. For types containing mutable pointers, this
+may be insufficient; immutable values should be used instead. Support for
+proper versioning is planned.
+
 The stm API tries to mimic that of Haskell's Control.Concurrent.STM, but this
 is not entirely possible due to Go's type system; we are forced to use
 interface{} and type assertions. Furthermore, Haskell can enforce at compile

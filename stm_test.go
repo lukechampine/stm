@@ -60,6 +60,34 @@ func TestReadVerify(t *testing.T) {
 	}
 }
 
+func TestRetry(t *testing.T) {
+	x := NewVar(10)
+	// spawn 10 transactions, one every 10 milliseconds. This will decrement x
+	// to 0 over the course of 100 milliseconds.
+	go func() {
+		for i := 0; i < 10; i++ {
+			time.Sleep(10 * time.Millisecond)
+			Atomically(func(tx *Tx) {
+				cur := tx.Get(x).(int)
+				tx.Set(x, cur-1)
+			})
+		}
+	}()
+	// Each time we read x before the above loop has finished, we need to
+	// retry. This should result in no more than 1 retry per transaction.
+	retry := 0
+	Atomically(func(tx *Tx) {
+		cur := tx.Get(x).(int)
+		if cur != 0 {
+			retry++
+			tx.Retry()
+		}
+	})
+	if retry > 10 {
+		t.Fatal("should have retried at most 10 times, got", retry)
+	}
+}
+
 func BenchmarkAtomicGet(b *testing.B) {
 	x := NewVar(0)
 	for i := 0; i < b.N; i++ {

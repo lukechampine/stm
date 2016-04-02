@@ -148,8 +148,9 @@ func BenchmarkIncrementSTM(b *testing.B) {
 			})
 		}
 		// wait for x to reach 1000
-		for AtomicGet(x).(int) != 1000 {
-		}
+		Atomically(func(tx *Tx) {
+			tx.Assert(tx.Get(x).(int) == 1000)
+		})
 	}
 }
 

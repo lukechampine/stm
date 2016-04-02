@@ -88,6 +88,41 @@ func TestRetry(t *testing.T) {
 	}
 }
 
+func TestVerify(t *testing.T) {
+	// tx.verify should check more than pointer equality
+	type foo struct {
+		i int
+	}
+	x := NewVar(&foo{3})
+	read := make(chan struct{})
+
+	// spawn a transaction that modifies x
+	go func() {
+		Atomically(func(tx *Tx) {
+			<-read
+			rx := tx.Get(x).(*foo)
+			rx.i = 7
+			tx.Set(x, rx)
+		})
+		read <- struct{}{}
+		// other tx should retry, so we need to read/send again
+		read <- <-read
+	}()
+
+	// spawn a transaction that reads x, then y. The other tx will modify x in
+	// between the reads, causing this tx to retry.
+	var i int
+	Atomically(func(tx *Tx) {
+		f := tx.Get(x).(*foo)
+		i = f.i
+		read <- struct{}{}
+		<-read // wait for other tx to complete
+	})
+	if i == 3 {
+		t.Fatal("verify did not retry despite modified Var", i)
+	}
+}
+
 func BenchmarkAtomicGet(b *testing.B) {
 	x := NewVar(0)
 	for i := 0; i < b.N; i++ {

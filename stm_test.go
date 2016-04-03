@@ -131,7 +131,7 @@ func TestSelect(t *testing.T) {
 	select {
 	case <-c:
 		t.Fatal("empty Select did not block forever")
-	case <-time.After(10*time.Millisecond):
+	case <-time.After(10 * time.Millisecond):
 	}
 
 	// with one arg, Select adds no effect

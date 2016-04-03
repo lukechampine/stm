@@ -230,10 +230,7 @@ func AtomicGet(v *Var) interface{} {
 func AtomicSet(v *Var, val interface{}) {
 	// since we're only doing one operation, we don't need a full transaction
 	globalLock.Lock()
-	v.mu.Lock()
-	v.val = val
-	v.mu.Unlock()
-	globalCond.Broadcast()
+	(&Tx{writes: map[*Var]interface{}{v: val}}).commit()
 	globalLock.Unlock()
 }
 

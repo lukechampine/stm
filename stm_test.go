@@ -177,6 +177,28 @@ func TestCompose(t *testing.T) {
 	}
 }
 
+func TestPanic(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic, got nil")
+		}
+	}()
+	// normal panics should escape Atomically
+	Atomically(func(*Tx) {
+		panic("foo")
+	})
+}
+
+func TestReadWritten(t *testing.T) {
+	// reading a variable written in the same transaction should return the
+	// previously written value
+	x := NewVar(3)
+	Atomically(func(tx *Tx) {
+		tx.Set(x, 5)
+		tx.Assert(tx.Get(x).(int) == 5)
+	})
+}
+
 func BenchmarkAtomicGet(b *testing.B) {
 	x := NewVar(0)
 	for i := 0; i < b.N; i++ {

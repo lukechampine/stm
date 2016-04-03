@@ -42,7 +42,7 @@ type gate struct {
 	remaining *stm.Var
 }
 
-func (g *gate) pass() {
+func (g gate) pass() {
 	stm.Atomically(func(tx *stm.Tx) {
 		rem := tx.Get(g.remaining).(int)
 		// wait until gate can hold us
@@ -51,7 +51,7 @@ func (g *gate) pass() {
 	})
 }
 
-func (g *gate) operate() {
+func (g gate) operate() {
 	// open gate, reseting capacity
 	stm.AtomicSet(g.remaining, g.capacity)
 	// wait for gate to be full
@@ -61,8 +61,8 @@ func (g *gate) operate() {
 	})
 }
 
-func newGate(capacity int) *gate {
-	return &gate{
+func newGate(capacity int) gate {
+	return gate{
 		capacity:  capacity,
 		remaining: stm.NewVar(0), // gate starts out closed
 	}
@@ -83,26 +83,26 @@ func newGroup(capacity int) *group {
 	}
 }
 
-func (g *group) join() (g1, g2 *gate) {
+func (g *group) join() (g1, g2 gate) {
 	stm.Atomically(func(tx *stm.Tx) {
 		rem := tx.Get(g.remaining).(int)
 		// wait until the group can hold us
 		tx.Assert(rem > 0)
 		tx.Set(g.remaining, rem-1)
 		// return the group's gates
-		g1 = tx.Get(g.gate1).(*gate)
-		g2 = tx.Get(g.gate2).(*gate)
+		g1 = tx.Get(g.gate1).(gate)
+		g2 = tx.Get(g.gate2).(gate)
 	})
 	return
 }
 
-func (g *group) await(tx *stm.Tx) (*gate, *gate) {
+func (g *group) await(tx *stm.Tx) (gate, gate) {
 	// wait for group to be empty
 	rem := tx.Get(g.remaining).(int)
 	tx.Assert(rem == 0)
 	// get the group's gates
-	g1 := tx.Get(g.gate1).(*gate)
-	g2 := tx.Get(g.gate2).(*gate)
+	g1 := tx.Get(g.gate1).(gate)
+	g2 := tx.Get(g.gate2).(gate)
 	// reset group
 	tx.Set(g.remaining, g.capacity)
 	tx.Set(g.gate1, newGate(g.capacity))
@@ -134,7 +134,7 @@ func spawnReindeer(g *group, id int) {
 
 type selection struct {
 	task         string
-	gate1, gate2 *gate
+	gate1, gate2 gate
 }
 
 func chooseGroup(g *group, task string, s *selection) func(*stm.Tx) {

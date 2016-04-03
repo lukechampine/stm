@@ -74,6 +74,7 @@ is not entirely possible due to Go's type system; we are forced to use
 interface{} and type assertions. Furthermore, Haskell can enforce at compile
 time that STM variables are not modified outside the STM monad. This is not
 possible in Go, so be especially careful when using pointers in your STM code.
+Remember: modifying a pointer is a side effect!
 */
 package stm
 

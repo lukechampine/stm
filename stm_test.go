@@ -37,10 +37,8 @@ func TestReadVerify(t *testing.T) {
 
 	// spawn a transaction that writes to x
 	go func() {
-		Atomically(func(tx *Tx) {
-			<-read
-			tx.Set(x, 3)
-		})
+		<-read
+		AtomicSet(x, 3)
 		read <- struct{}{}
 		// other tx should retry, so we need to read/send again
 		read <- <-read
@@ -120,6 +118,62 @@ func TestVerify(t *testing.T) {
 	})
 	if i == 3 {
 		t.Fatal("verify did not retry despite modified Var", i)
+	}
+}
+
+func TestSelect(t *testing.T) {
+	// empty Select should block forever
+	c := make(chan struct{})
+	go func() {
+		Atomically(Select())
+		c <- struct{}{}
+	}()
+	select {
+	case <-c:
+		t.Fatal("empty Select did not block forever")
+	case <-time.After(10*time.Millisecond):
+	}
+
+	// with one arg, Select adds no effect
+	x := NewVar(2)
+	Atomically(Select(func(tx *Tx) {
+		tx.Assert(tx.Get(x).(int) == 2)
+	}))
+
+	var picked int
+	Atomically(Select(
+		// always blocks; should never be selected
+		func(tx *Tx) {
+			tx.Retry()
+			picked = 1
+		},
+		// always succeeds; should always be selected
+		func(tx *Tx) {
+			picked = 2
+		},
+		// always succeeds; should never be selected
+		func(tx *Tx) {
+			picked = 3
+		},
+	))
+	if picked != 2 {
+		t.Fatal("Select selected wrong transaction:", picked)
+	}
+}
+
+func TestCompose(t *testing.T) {
+	nums := make([]int, 100)
+	fns := make([]func(*Tx), 100)
+	for i := range fns {
+		fns[i] = func(x int) func(*Tx) {
+			return func(*Tx) { nums[x] = x }
+		}(i) // capture loop var
+	}
+	Atomically(Compose(fns...))
+	for i := range nums {
+		if nums[i] != i {
+			t.Error("Compose failed:", nums[i], i)
+		}
 	}
 }
 

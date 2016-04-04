@@ -91,7 +91,8 @@ See [example_santa_test.go](example_santa_test.go) for a more complex example.
 
 ## Pointers
 
-Don't use stm to manage pointers!
+Be very careful when managing pointers inside transactions! (This includes
+slices, maps, and channels.) Here's why:
 
 ```go
 p := stm.NewVar([]byte{1,2,3})
@@ -118,6 +119,36 @@ stm.Atomically(func(tx *stm.Tx) {
 ```
 
 This is less efficient, but it preserves atomicity.
+
+In the same vein, it would be a mistake to do this:
+
+```go
+type foo struct {
+	i int
+}
+f := &foo{i: 2}
+p := stm.NewVar(f)
+stm.Atomically(func(tx *stm.Tx) {
+	f := tx.Get(p).(*foo)
+	f.i = 7
+	tx.Set(p, f)
+})
+```
+
+...because setting `f.i` is a side-effect that escapes the transaction. Here,
+the correct approach is to move the `Var` inside the struct:
+
+```go
+type foo struct {
+	i *stm.Var
+}
+f := foo{i: stm.NewVar(2)}
+stm.Atomically(func(tx *stm.Tx) {
+	i := tx.Get(f.i).(int)
+	i = 7
+	tx.Set(f.i, i)
+})
+```
 
 ## Benchmarks
 

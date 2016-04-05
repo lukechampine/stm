@@ -83,8 +83,25 @@ stm.Atomically(stm.Select(
 
 	// this function will never run, because the previous
 	// function succeeded
-	func(tx *stm.Tx) { tx.Retry() },
+	func(tx *stm.Tx) { tx.Set(n, 11) },
 ))
+
+// since Select is a normal transaction, if the entire select retries
+// (blocks), it will be retried as a whole:
+x := 0
+stm.Atomically(stm.Select(
+	// this function will run twice, and succeed the second time
+	func(tx *stm.Tx) { tx.Assert(x == 1) },
+
+	// this function will run once
+	func(tx *stm.Tx) {
+		x = 1
+		tx.Retry()
+	},
+))
+// But wait! Transactions are only retried when one of the Vars they read is
+// updated. Since x isn't a stm Var, this code will actually block forever --
+// but you get the idea.
 ```
 
 See [example_santa_test.go](example_santa_test.go) for a more complex example.
@@ -92,7 +109,7 @@ See [example_santa_test.go](example_santa_test.go) for a more complex example.
 ## Pointers
 
 Be very careful when managing pointers inside transactions! (This includes
-slices, maps, and channels.) Here's why:
+slices, maps, channels, and captured variables.) Here's why:
 
 ```go
 p := stm.NewVar([]byte{1,2,3})
@@ -126,8 +143,7 @@ In the same vein, it would be a mistake to do this:
 type foo struct {
 	i int
 }
-f := &foo{i: 2}
-p := stm.NewVar(f)
+p := stm.NewVar(&foo{i: 2})
 stm.Atomically(func(tx *stm.Tx) {
 	f := tx.Get(p).(*foo)
 	f.i = 7

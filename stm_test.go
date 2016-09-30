@@ -199,6 +199,25 @@ func TestReadWritten(t *testing.T) {
 	})
 }
 
+func TestAtomicSetRetry(t *testing.T) {
+	// AtomicSet should cause waiting transactions to retry
+	x := NewVar(3)
+	done := make(chan struct{})
+	go func() {
+		Atomically(func(tx *Tx) {
+			tx.Assert(tx.Get(x).(int) == 5)
+		})
+		done <- struct{}{}
+	}()
+	time.Sleep(10 * time.Millisecond)
+	AtomicSet(x, 5)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("AtomicSet did not wake up a waiting transaction")
+	}
+}
+
 func BenchmarkAtomicGet(b *testing.B) {
 	x := NewVar(0)
 	for i := 0; i < b.N; i++ {

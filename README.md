@@ -1,5 +1,7 @@
 # stm
 
+## This package is no longer maintained. Please see [anacrolix/stm](https://github.com/anacrolix/stm) for a maintained fork.
+
 [![GoDoc](https://godoc.org/github.com/lukechampine/stm?status.svg)](https://godoc.org/github.com/lukechampine/stm) [![Go Report Card](https://goreportcard.com/badge/github.com/lukechampine/stm)](https://goreportcard.com/report/github.com/lukechampine/stm)
 
 Package `stm` provides [Software Transactional Memory](https://en.wikipedia.org/wiki/Software_transactional_memory) operations for Go. This is
